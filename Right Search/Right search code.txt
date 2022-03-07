@@ -1,0 +1,1096 @@
+import openpyxl
+from selenium import webdriver
+from selenium.webdriver.support import expected_conditions as EC
+import time
+from selenium.webdriver.support.ui import Select
+from openpyxl import Workbook
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.common.action_chains import ActionChains
+from colorama import Fore
+import xlutils
+import csv
+import os
+import pandas
+Property_address_path="C:/Users/Vidhya/Desktop/Rightsearchoutput/PropertyyyyAddress.xlsx"
+wb=openpyxl.load_workbook(Property_address_path)
+propertysheet=wb.active
+rows_count=propertysheet.max_row
+print(Fore.BLUE+"Total Addresses:"+Fore.LIGHTWHITE_EX+str(rows_count))
+def findpostal1(Address):#optional code if postalfinder website server is down we can use this but this is not an efficient one
+    if ', ' in Address:
+        x = Address.rsplit(", ")
+        post=x[-1]
+        y = post.rsplit(" ")
+        if len(y) > 1:
+            post=y[-2]
+    else:
+        if ',' in Address:
+            x = Address.rsplit(",")
+            post = x[-1]
+            y = post.rsplit(" ")
+            if len(y) > 1:
+                post = y[-2]
+        else:
+            y =Address.rsplit(" ")
+            post = y[-1]
+            if len(y) > 1:
+                post = y[-2]
+    if post.isalnum():
+        return post
+    else:
+        return 0
+def findpostal(Address):
+    try:
+        driver = webdriver.Chrome(executable_path="C:/Driver/chromedriver.exe")
+        driver.get("https://postcodefinder.net/")
+        time.sleep(5)
+        wait = WebDriverWait(driver, 200)
+        textinput= wait.until(EC.element_to_be_clickable((By.XPATH, "// *[ @ id = 'wrapper'] / div[1] / div[2] / form / input")))
+        textinput.send_keys(Address)
+        textsubmit= wait.until(EC.element_to_be_clickable((By.XPATH,"// *[ @ id = 'wrapper'] / div[1] / div[2] / form / button")))
+        textsubmit.click()
+        time.sleep(3)
+        code= wait.until(EC.element_to_be_clickable((By.XPATH,"//*[@id='map']/div[1]/div[6]/div/div[1]/div/div[2]")))
+        post=code.text.strip("Postcode: ")
+        driver.close()
+        x = post.rsplit(" ")
+        if len(x)>1:
+            post=x[-2]
+        if(post=="unknown"):
+            post=post+" "
+        if(post.isalnum()==True):
+            return post
+        else:
+            return 0
+    except Exception as e:
+        return e
+def findweblink(postalcode):
+    weblink=""
+    Mapsheet_path = "C:/Users/Vidhya/Desktop/Rightsearchoutput/Mapsheet.xlsx"
+    map_wb = openpyxl.load_workbook(Mapsheet_path)
+    map_propertysheet = map_wb.active
+    postalcode_maxrow = map_propertysheet.max_row
+    for i in range(1,postalcode_maxrow+1):
+        # fetching postal address from excel
+        post_code = map_propertysheet.cell(row=i, column=1).value
+        post_code_list=post_code.rsplit(",")
+        post_code_list_len=len(post_code_list)
+        for b in range(0,post_code_list_len):
+            if(postalcode == post_code_list[b]):
+                weblink = weblink +" " +map_propertysheet.cell(row=i, column=2).value
+                return weblink
+    if(weblink==""):
+        return 0
+def resultt(count,result, Address):
+    if (result != 0):
+        print(Fore.LIGHTWHITE_EX+str(count) + "."+Address + Fore.RED + " -oops Something went wrong while extracting planning applications" + str(result))
+    else:
+        print(Fore.LIGHTWHITE_EX+str(count) + "." + Address + Fore.GREEN+" -extracted successfully")
+def cardiff(Address,website):
+    try:
+        # Browser work
+        driver = webdriver.Chrome(executable_path="C:/Driver/chromedriver.exe")
+        driver.get(website)
+        driver.maximize_window()
+        print(Fore.LIGHTYELLOW_EX+"Loading...")
+        driver.implicitly_wait(10)
+        time.sleep(5)
+        wait = WebDriverWait(driver, 200)
+        element = wait.until(EC.element_to_be_clickable((By.ID, "atTextSearch")))
+        time.sleep(8)
+        element.click()
+        element.send_keys(Address)
+        element2 = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='searchForm']/input[2]")))
+        element2.click()  # find
+        time.sleep(15)
+        element3 = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='atLocationSearch']/p/div/ol/li/a")))
+        element3.click()  # list
+        time.sleep(3)
+        element3 = wait.until(EC.element_to_be_clickable((By.XPATH, "/html/body/div[2]/div[2]/div[2]/div[1]/form/div[3]/input[3]")))
+        element3.click()  # my map
+        time.sleep(30)
+        env_check = wait.until(EC.element_to_be_clickable((By.XPATH, "/html/body/div[6]/div/div/div/div/div[4]/div[2]/div[5]/h3/span[1]/input")))
+        env_check.click()  # env
+        time.sleep(3)
+        plan = wait.until(EC.element_to_be_clickable((By.XPATH, "/html/body/div[6]/div/div/div/div/div[4]/div[2]/div[7]/h3/span[1]/input")))
+        plan.click()  # plan
+        time.sleep(30)
+        img = wait.until(EC.element_to_be_clickable((By.XPATH,"/html/body/div[2]/div[2]/div[2]/div[1]/form/div[7]/div[1]/div/div/div[2]/div[1]/div[3]/div/img")))
+        img.click()  # drop pin
+        time.sleep(15)
+        # for excel output
+        workbook = Workbook()
+        sheet1 = workbook.active
+        sheet1.title = "sheet 1"
+        row_count = 1
+        sheet1.cell(row=row_count, column=1).value = "Property Address:"+Address
+        row_count = row_count + 1
+        # copying data fields
+        popup = driver.find_element_by_xpath("//*[@class='atPopupFeatureInfo']")
+        divs = popup.find_elements_by_tag_name('div')
+        for var in divs:
+            classname = var.get_attribute("class")
+            if "Planning-Applications" in classname:
+                for z in var.find_elements_by_tag_name('div'):
+                    p = z.find_elements_by_tag_name("p")
+                    for field in p:
+                        row_count = row_count + 1
+                        sheet1.cell(row=row_count, column=1).value = field.text
+
+        workbook.save("C:/Users/Vidhya/Desktop/Rightsearchoutput/Cardiff/" + Address + ".xlsx")
+        #CSV CONVERSION
+        data = pandas.read_excel("C:/Users/Vidhya/Desktop/Rightsearchoutput/Cardiff/"+Address+".xlsx", engine='openpyxl')
+        data.to_csv("C:/Users/Vidhya/Desktop/Rightsearchoutput/Cardiff/"+Address+".csv", index=None, header=True)
+        os.remove("C:/Users/Vidhya/Desktop/Rightsearchoutput/Cardiff/"+Address+".xlsx")
+        driver.close()
+        return 0
+    except Exception as e:
+        return e
+def torfaen(Address, website):
+    try:
+        driver = webdriver.Chrome(executable_path="C:/Driver/chromedriver.exe")
+        driver.get(website)
+        driver.maximize_window()
+        print(Fore.LIGHTYELLOW_EX+"Loading...")
+        driver.implicitly_wait(10)
+        time.sleep(5)
+        # select All
+        wait = WebDriverWait(driver, 150)
+        element = wait.until(EC.element_to_be_clickable((By.ID, "searchTypeStatus")))
+        drp = Select(element)
+        drp.select_by_visible_text("All")
+        time.sleep(8)
+        # browser
+        wait = WebDriverWait(driver, 150)
+        element = wait.until(EC.element_to_be_clickable((By.ID, "simpleSearchString")))
+        element.click()
+        element.send_keys(Address)
+        element2 = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='simpleSearchForm']/div[3]/input[3]")))
+        element2.click()  # find
+        # for excel output
+        workbook = Workbook()
+        sheet1 = workbook.active
+        sheet1.title = "sheet 1"
+        row_count = 1
+        sheet1.cell(row=row_count, column=1).value = "Property Address: " + Address
+        row_count = row_count + 1
+        sheet1.cell(row=row_count, column=1).value = "_____Summary_____"
+        element4 = wait.until(EC.element_to_be_clickable((By.ID, "simpleDetailsTable")))
+        table_rows = element4.find_elements_by_tag_name("tr")
+        Listy = ["Reference","Address", "Proposal", "Status", "Decision", "Decision Issued Date","Appeal Status","Appeal Decision"]
+        for tr in table_rows:
+            thead = tr.find_element_by_tag_name("th").text
+            if thead in Listy:
+                tbody = tr.find_element_by_tag_name("td").text
+                content = thead + ":" + tbody
+                # pasting the output in excel
+                row_count = row_count + 1
+                sheet1.cell(row=row_count, column=1).value = content
+        # extracting details
+        row_count = row_count + 1
+        sheet1.cell(row=row_count, column=1).value = "_____Important Dates_____"
+        element3 = wait.until(EC.element_to_be_clickable((By.ID, "subtab_dates")))
+        element3.click()  # find
+        element4 = wait.until(EC.element_to_be_clickable((By.ID, "simpleDetailsTable")))
+        table_rows = element4.find_elements_by_tag_name("tr")
+        Listy=["Application Received Date","Application Validated Date","Decision Made Date","Decision Issued Date","Decision Printed Date","Temporary Permission Expiry Date"]
+        for tr in table_rows:
+            row_count = row_count + 1
+            thead = tr.find_element_by_tag_name("th").text
+            if thead in Listy:
+                tbody = tr.find_element_by_tag_name("td").text
+                content=thead+":"+tbody
+                # pasting the output in excel
+                sheet1.cell(row=row_count, column=1).value = content
+        address = Address.strip()
+        workbook.save("C:/Users/Vidhya/Desktop/Rightsearchoutput/Torfaen/" + address + ".xlsx")
+        #csv conversion
+        data = pandas.read_excel("C:/Users/Vidhya/Desktop/Rightsearchoutput/Torfaen/" + address + ".xlsx",engine='openpyxl')
+        data.to_csv("C:/Users/Vidhya/Desktop/Rightsearchoutput/Torfaen/" + address + ".csv", index=None, header=True)
+        os.remove("C:/Users/Vidhya/Desktop/Rightsearchoutput/Torfaen/" + address + ".xlsx")
+        driver.close()
+        return 0
+    except Exception as e:
+        return e
+def npt(Address, website):
+   try:
+       driver = webdriver.Chrome(executable_path="C:/Driver/chromedriver.exe")
+       driver.get(website)
+       driver.maximize_window()
+       print(Fore.LIGHTYELLOW_EX+"Loading...")
+       driver.implicitly_wait(10)
+       time.sleep(5)
+       # browser
+       wait = WebDriverWait(driver, 150)
+       element = wait.until(EC.element_to_be_clickable((By.ID, "simpleSearchString")))
+       time.sleep(8)
+       element.click()
+       time.sleep(4)
+       element.send_keys(Address)
+       element2 = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='simpleSearchForm']/div[3]/input[3]")))
+       element2.click()  # find
+       # for excel output
+       workbook = Workbook()
+       sheet1 = workbook.active
+       sheet1.title = "sheet 1"
+       row_count = 1
+       sheet1.cell(row=row_count, column=1).value = "Property Address:" + Address
+       #summary
+       row_count = row_count+1
+       sheet1.cell(row=row_count, column=1).value = "_____Summary_____"
+       element4 = wait.until(EC.element_to_be_clickable((By.ID, "simpleDetailsTable")))
+       table_rows = element4.find_elements_by_tag_name("tr")
+       Listy = ["Reference", "Address", "Proposal", "Status", "Decision", "Decision Issued Date", "Appeal Status","Appeal Decision"]
+       for tr in table_rows:
+           thead = tr.find_element_by_tag_name("th").text
+           if thead in Listy:
+               row_count = row_count + 1
+               tbody = tr.find_element_by_tag_name("td").text
+               content = thead + ":" + tbody
+               # pasting the output in excel
+               sheet1.cell(row=row_count, column=1).value = content
+       row_count = row_count + 1
+       sheet1.cell(row=row_count, column=1).value = "_____Important Dates_____"
+       element3 = wait.until(EC.element_to_be_clickable((By.ID, "subtab_dates")))
+       element3.click()  # find
+       # extracting details
+       element4 = wait.until(EC.element_to_be_clickable((By.ID, "simpleDetailsTable")))
+       table_rows = element4.find_elements_by_tag_name("tr")
+       Listy = ["Application Received Date", "Application Validated Date", "Decision Made Date", "Decision Issued Date","Decision Printed Date","Temporary Permission Expiry Date"]
+       for tr in table_rows:
+           row_count = row_count + 1
+           thead = tr.find_element_by_tag_name("th").text
+           if thead in Listy:
+               tbody = tr.find_element_by_tag_name("td").text
+               content=thead+":"+tbody
+               # pasting the output in excel
+               sheet1.cell(row=row_count, column=1).value = content
+       address = Address.strip()
+       workbook.save("C:/Users/Vidhya/Desktop/Rightsearchoutput/NeathPort/" + address + ".xlsx")
+       #csv conversion
+       data = pandas.read_excel("C:/Users/Vidhya/Desktop/Rightsearchoutput/NeathPort/" + address + ".xlsx",engine='openpyxl')
+       data.to_csv("C:/Users/Vidhya/Desktop/Rightsearchoutput/NeathPort/" + address + ".csv", index=None, header=True)
+       os.remove("C:/Users/Vidhya/Desktop/Rightsearchoutput/NeathPort/" + address + ".xlsx")
+       driver.close()
+       return 0
+   except Exception as e:
+       return e
+def powys(Address, website):
+    try:
+        driver = webdriver.Chrome(executable_path="C:/Driver/chromedriver.exe")
+        driver.get(website)
+        driver.maximize_window()
+        print(Fore.LIGHTYELLOW_EX+"Loading...")
+        driver.implicitly_wait(10)
+        time.sleep(5)
+        # browser
+        wait = WebDriverWait(driver, 150)
+        element = wait.until(EC.element_to_be_clickable((By.ID, "simpleSearchString")))
+        time.sleep(8)
+        element.click()
+        time.sleep(10)
+        element.send_keys(Address)  # //*[@id="simpleSearchForm"]/div[4]/input[3]
+        element2 = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='simpleSearchForm']/div[4]/input[3]")))
+        element2.click()  # find
+        # for excel output
+        workbook = Workbook()
+        sheet1 = workbook.active
+        sheet1.title = "sheet 1"
+        row_count = 1
+        sheet1.cell(row=row_count, column=1).value = "Property Address:" + Address
+        row_count = row_count+1
+        sheet1.cell(row=row_count, column=1).value = "-----Summary-----"
+        element4 = wait.until(EC.element_to_be_clickable((By.ID, "simpleDetailsTable")))
+        table_rows = element4.find_elements_by_tag_name("tr")
+        Listy = ["Reference", "Address", "Proposal", "Status", "Decision", "Decision Issued Date", "Appeal Status","Appeal Decision"]
+        for tr in table_rows:
+            thead = tr.find_element_by_tag_name("th").text
+            if thead in Listy:
+                tbody = tr.find_element_by_tag_name("td").text
+                content = thead + ":" + tbody
+                # pasting the output in excel
+                row_count = row_count + 1
+                sheet1.cell(row=row_count, column=1).value = content
+        row_count = row_count + 1
+        sheet1.cell(row=row_count, column=1).value = "-----Important Dates-----"
+        element3 = wait.until(EC.element_to_be_clickable((By.ID, "subtab_dates")))
+        element3.click()  # find
+        # extracting details
+        element4 = wait.until(EC.element_to_be_clickable((By.ID, "simpleDetailsTable")))
+        table_rows = element4.find_elements_by_tag_name("tr")
+        Listy=["Application Received Date","Application Validated Date","Decision Made Date","Decision Issued Date","Decision Printed Date","Temporary Permission Expiry Date"]
+        for tr in table_rows:
+            row_count = row_count + 1
+            thead = tr.find_element_by_tag_name("th").text
+            if thead in Listy:
+                tbody = tr.find_element_by_tag_name("td").text
+                content=thead+":"+tbody
+                # pasting the output in excel
+                sheet1.cell(row=row_count, column=1).value =content
+            address = Address.strip()
+        workbook.save("C:/Users/Vidhya/Desktop/Rightsearchoutput/Powys/" + address + ".xlsx")
+        # csv conversion
+        data = pandas.read_excel("C:/Users/Vidhya/Desktop/Rightsearchoutput/Powys/" + address + ".xlsx",engine='openpyxl')
+        data.to_csv("C:/Users/Vidhya/Desktop/Rightsearchoutput/Powys/" + address + ".csv", index=None, header=True)
+        os.remove("C:/Users/Vidhya/Desktop/Rightsearchoutput/Powys/" + address + ".xlsx")
+        driver.close()
+        return 0
+    except Exception as e:
+        return e
+def carmarthenshire(Address, website):
+    try:
+        driver = webdriver.Chrome(executable_path="C:/Driver/chromedriver.exe")
+        print(Fore.LIGHTYELLOW_EX + "Loading...")
+        driver.get("https://www.carmarthenshire.gov.wales/home/council-services/planning/search-for-a-planning-application/map-of-planning-applications/#.YKZfpKgzbIU")
+        driver.implicitly_wait(10)
+        driver.maximize_window()
+        time.sleep(5)
+        wait = WebDriverWait(driver, 150)
+        save = wait.until(EC.element_to_be_clickable((By.ID, "ccc-dismiss-button")))
+        save.click()
+        time.sleep(5)
+        search = wait.until(EC.element_to_be_clickable((By.ID, "postCodeSearchMap")))
+        search.click()
+        time.sleep(5)
+        search.send_keys(Address)
+        time.sleep(40)
+        act=ActionChains(driver)
+        act.send_keys(Keys.ENTER).perform()
+        time.sleep(5)
+        li = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='content']/div[2]/div[1]/div/div/div[2]/ul/li")))
+        li.click()
+        time.sleep(20)
+        img = wait.until(EC.element_to_be_clickable((By.ID, "OL_Icon_602_innerImage")))
+        img.click()
+        time.sleep(5)
+        # for excel output
+        workbook = Workbook()
+        sheet1 = workbook.active
+        sheet1.title = "sheet 1"
+        row_count = 1
+        sheet1.cell(row=row_count, column=1).value = "Property Address:" + Address
+        popup = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='idthatdoesntmatter_contentDiv']")))
+        divs = popup.find_elements_by_tag_name("div")
+        for var in divs:
+            classname = var.get_attribute("class")
+            if "call-out-row-" in classname:
+                div = var.find_element_by_tag_name("div")
+                row_count = row_count+1
+                sheet1.cell(row=row_count, column=1).value = div.text
+                table = var.find_element_by_tag_name("table")
+                trs = table.find_elements_by_tag_name("tr")
+                for var2 in trs:
+                    row_count = row_count + 1
+                    sheet1.cell(row=row_count, column=1).value = var2.text
+        workbook.save("C:/Users/Vidhya/Desktop/Rightsearchoutput/carmarthenshire/" + Address + ".xlsx")
+        # csv conversion
+        data = pandas.read_excel("C:/Users/Vidhya/Desktop/Rightsearchoutput/carmarthenshire/" + Address + ".xlsx", engine='openpyxl')
+        data.to_csv("C:/Users/Vidhya/Desktop/Rightsearchoutput/carmarthenshire/" + Address + ".csv", index=None, header=True)
+        os.remove("C:/Users/Vidhya/Desktop/Rightsearchoutput/carmarthenshire/" + Address + ".xlsx")
+        #driver.close()
+        return 0
+    except Exception as e:
+        return e
+def rhondaa(Address, website):
+    try:
+        driver = webdriver.Chrome(executable_path="C:/Driver/chromedriver.exe")
+        print(Fore.LIGHTYELLOW_EX+"Loading...")
+        driver.get("https://my.rctcbc.gov.uk/myRhondda.aspx?MapSource=RCT/AllMaps_english&amp;StartEasting=299818&amp;StartN")
+        driver.implicitly_wait(10)
+        driver.maximize_window()
+        time.sleep(5)
+        wait = WebDriverWait(driver, 150)
+        my_maps = wait.until(EC.element_to_be_clickable((By.ID, "atTabBar_btnTabRCT_-_AllMaps_english")))
+        my_maps.click()
+        time.sleep(8)
+        textbox = wait.until(EC.element_to_be_clickable((By.ID, "atTextSearch")))
+        textbox.click()
+        time.sleep(3)
+        textbox.send_keys(Address)
+        find = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='searchForm']/input[2]")))
+        find.click()
+        time.sleep(3)
+        list = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='atLocationSearch']/p/div/ol/li[1]/a")))
+        list.click()
+        time.sleep(3)
+        check = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='showmapcategories']/div[7]/h3/span[1]/input")))
+        check.click()
+        time.sleep(10)
+        map_icon = wait.until(EC.element_to_be_clickable((By.ID, "OL_Icon_121_innerImage")))
+        map_icon.click()
+        time.sleep(3)
+        # for excel output
+        workbook = Workbook()
+        sheet1 = workbook.active
+        sheet1.title = "sheet 1"
+        sheet1.cell(row=1, column=1).value = "Property Address"+":"+Address
+        row_count = 1
+        # copying data
+        popup = driver.find_element_by_xpath("//*[@class='atPopupFeatureInfo']")
+        divs = popup.find_elements_by_tag_name('div')
+        for var in divs:
+            classname = var.get_attribute("class")
+            if "Planning-Applications" in classname:
+                for z in var.find_elements_by_tag_name('div'):
+                    for zz in z.find_elements_by_tag_name('p'):
+                        row_count = row_count + 1
+                        sheet1.cell(row=row_count, column=1).value = zz.text
+        address = Address.strip()
+        workbook.save("C:/Users/Vidhya/Desktop/Rightsearchoutput/Rhondaa/" + address + ".xlsx")
+        # csv conversion
+        data = pandas.read_excel("C:/Users/Vidhya/Desktop/Rightsearchoutput/Rhondaa/" + address + ".xlsx",engine='openpyxl')
+        data.to_csv("C:/Users/Vidhya/Desktop/Rightsearchoutput/Rhondaa/" + address + ".csv", index=None,header=True)
+        os.remove("C:/Users/Vidhya/Desktop/Rightsearchoutput/Rhondaa/" + address + ".xlsx")
+        driver.close()
+        return 0
+    except Exception as e:
+        return e
+def monmouthshire(Address, website):
+    try:
+        driver = webdriver.Chrome(executable_path="C:/Driver/chromedriver.exe")
+        print(Fore.LIGHTYELLOW_EX+"Loading...")
+        driver.get("https://maps.monmouthshire.gov.uk/localinfo.aspx")
+        driver.maximize_window()
+        driver.implicitly_wait(10)
+        time.sleep(5)
+        wait = WebDriverWait(driver, 200)
+        Mymaps = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='atTabBar_btnTabMonmouthshire_-_Monmouth']")))
+        time.sleep(3)
+        Mymaps.click()
+        Textsearch = wait.until(EC.element_to_be_clickable((By.ID, "atTextSearch")))
+        Textsearch.click()
+        time.sleep(3)
+        Textsearch.send_keys(Address)
+        time.sleep(3)
+        find = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@class='ui-state-default ui-corner-all atSearchBtn']")))
+        find.click()
+        time.sleep(3)
+        list = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='atLocationSearch']/p/div/ol/li[1]/a")))
+        list.click()
+        time.sleep(3)
+        planning = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='showmapcategories']/div[6]/h3/span[1]/input")))
+        planning.click()
+        time.sleep(20)
+        img = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@class='olAlphaImg']")))
+        img.click()
+        time.sleep(8)
+        popup = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@class='atPopupFeatureInfo']")))
+        divs = popup.find_elements_by_tag_name('div')
+        flag = 0
+        count = 0
+        List = []
+        workbook = Workbook()
+        sheet1 = workbook.active
+        sheet1.title = "sheet 1"
+        row_count = 1
+        sheet1.cell(row=row_count, column=1).value = "Property Address:" + Address
+        for a in divs:
+            classname = a.get_attribute("class")
+            if "Planning-Applications" in classname:
+                for z in a.find_elements_by_tag_name('div'):
+                    count = count + 1
+        for b in range(1, count + 1):
+            if (flag != 0):
+                img = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@class='olAlphaImg']")))
+                time.sleep(3)
+                img.click()
+                time.sleep(8)  # //*[@id="OpenLayers.Popup.FramedCompact_146_contentDiv"]/div/div/div[1]/p/strong[2]/a
+            flag = 1
+            row_count = row_count + 1
+            sheet1.cell(row=row_count, column=1).value = " "
+            row_count=row_count+1
+            sheet1.cell(row=row_count, column=1).value = "_____Result" + str(b)+"_____"
+            row_count = row_count + 1
+            sheet1.cell(row=row_count, column=1).value = "_____Summary_____"
+            App = driver.find_element_by_xpath("//*[@class='atPopupFeatureInfo'] / div / div[" + str(b) + "]")
+            App.click()
+            time.sleep(5)
+            table = wait.until(EC.element_to_be_clickable((By.ID, "simpleDetailsTable")))
+            table_rows = table.find_elements_by_tag_name("tr")
+            Listy = ["Reference", "Address", "Proposal", "Status", "Decision", "Decision Issued Date", "Appeal Status","Appeal Decision"]
+            for tr in table_rows:
+                row_count = row_count + 1
+                thead = tr.find_element_by_tag_name("th").text
+                if thead in Listy:
+                    tbody = tr.find_element_by_tag_name("td").text
+                    sheet1.cell(row=row_count, column=1).value = thead + ":" + tbody
+            row_count = row_count + 1
+            sheet1.cell(row=row_count, column=1).value = "_____Important Dates_____"
+            try:
+                imp_dates = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='subtab_dates']")))
+            except Exception as e:
+                ex="Planning Applications not available"
+                return ex
+            imp_dates.click()
+            table = wait.until(EC.element_to_be_clickable((By.ID, "simpleDetailsTable")))
+            table_rows = table.find_elements_by_tag_name("tr")
+            Listy = ["Application Received Date", "Application Validated Date", "Decision Made Date","Decision Issued Date", "Decision Printed Date","Temporary Permission Expiry Date"]
+            for tr in table_rows:
+                row_count = row_count + 1
+                thead = tr.find_element_by_tag_name("th").text
+                if thead in Listy:
+                    tbody = tr.find_element_by_tag_name("td").text
+                    sheet1.cell(row=row_count, column=1).value = thead+":"+tbody
+            row_count = row_count + 1
+            sheet1.cell(row=row_count, column=1).value = " "
+            workbook.save("C:/Users/Vidhya/Desktop/Rightsearchoutput/Monmouthshire/" + Address + ".xlsx")
+            driver.back()
+            driver.back()
+            time.sleep(10)
+        driver.close()
+        # csv conversion
+        data = pandas.read_excel("C:/Users/Vidhya/Desktop/Rightsearchoutput/Monmouthshire/" + Address + ".xlsx",engine='openpyxl')
+        data.to_csv("C:/Users/Vidhya/Desktop/Rightsearchoutput/Monmouthshire/" + Address + ".csv", index=None, header=True)
+        os.remove("C:/Users/Vidhya/Desktop/Rightsearchoutput/Monmouthshire/" + Address + ".xlsx")
+        return 0
+    except Exception as e:
+        return e
+def bridgend(Address, website):
+    try:
+        driver = webdriver.Chrome(executable_path="C:/Driver/chromedriver.exe")
+        print(Fore.LIGHTYELLOW_EX+"Loading...")
+        driver.get("http://planning.bridgend.gov.uk/")
+        driver.maximize_window()
+        driver.implicitly_wait(10)
+        time.sleep(5)
+        wait = WebDriverWait(driver, 150)
+        agree = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='main-content']/div/div/section/div/div/div/div/form/div/input")))
+        time.sleep(8)
+        agree.click()
+        time.sleep(4)
+        textbox = wait.until(EC.element_to_be_clickable((By.ID, "SearchParams_Address")))
+        time.sleep(3)
+        textbox.click()
+        textbox.send_keys(Address)
+        search = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='main-content']/div/div/section/div/div/div/div/form/div[2]/input[1]")))
+        time.sleep(3)
+        search.click()
+        time.sleep(7)
+        table_responsive = driver.find_element_by_class_name("table-responsive")
+        body_of_table = table_responsive.find_element_by_tag_name("tbody")
+        rows = body_of_table.find_elements_by_tag_name("tr")
+        count = 0
+        for row in rows:
+            count = count + 1
+        # for excel output
+        workbook = Workbook()
+        sheet1 = workbook.active
+        sheet1.title = "sheet 1"
+        row_count = 1
+        sheet1.cell(row=row_count, column=1).value = "Property Address:" + Address
+        for row in range(1, count + 1):
+            row_count=row_count+1
+            sheet1.cell(row=row_count, column=1).value = "______Result"+str(row)+"_____"
+            link = driver.find_element_by_xpath("//*[@id='main-content']/div/div/section/div/div/div/div/div[2]/table/tbody/tr[" + str(row) + "]/td[1]/a")
+            link.click()
+            time.sleep(5)
+            wait = WebDriverWait(driver, 150)
+            t = wait.until(EC.element_to_be_clickable((By.CLASS_NAME, "table-responsive")))
+            body = t.find_element_by_tag_name("tbody")
+            rs = body.find_elements_by_tag_name("tr")
+            for t_row in rs:
+                row_count = row_count + 1
+                tdatas = t_row.find_elements_by_tag_name("td")
+                sheet1.cell(row=row_count, column=1).value = tdatas[0].text+":"+tdatas[1].text
+            workbook.save("C:/Users/Vidhya/Desktop/Rightsearchoutput/Bridgend/" + Address + ".xlsx")
+            driver.back()
+        driver.close()
+        #csv conversion
+        data = pandas.read_excel("C:/Users/Vidhya/Desktop/Rightsearchoutput/Bridgend/" + Address + ".xlsx",engine='openpyxl')
+        data.to_csv("C:/Users/Vidhya/Desktop/Rightsearchoutput/Bridgend/" + Address + ".csv", index=None,header=True)
+        os.remove("C:/Users/Vidhya/Desktop/Rightsearchoutput/Bridgend/" + Address + ".xlsx")
+        return 0
+    except Exception as e:
+        return e
+def newport(Address, website):
+    try:
+        driver = webdriver.Chrome(executable_path="C:/Driver/chromedriver.exe")
+        print(Fore.LIGHTYELLOW_EX+"Loading...")
+        driver.get(website)
+        driver.maximize_window()
+        driver.implicitly_wait(10)
+        time.sleep(5)
+        wait = WebDriverWait(driver, 150)
+        my_maps = wait.until(EC.element_to_be_clickable((By.ID, "atTabBar_btnTabmapsources_-_AllMaps")))
+        my_maps.click()
+        time.sleep(8)
+        textbox = wait.until(EC.element_to_be_clickable((By.ID, "atTextSearch")))
+        textbox.click()
+        time.sleep(3)
+        textbox.send_keys(Address)
+        time.sleep(3)
+        find = driver.find_element_by_xpath("/html/body/div[1]/div[1]/form/div[4]/div/p/form/input[2]")
+        find.click()
+        time.sleep(3)
+        list = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='id_aw_results']/ol/li[1]/a")))
+        list.click()
+        time.sleep(3)
+        check = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='showmapcategories']/div[6]/h3/span[1]/input")))
+        check.click()
+        time.sleep(3)
+        map_icon = wait.until(EC.element_to_be_clickable((By.ID, "OL_Icon_117_innerImage")))
+        map_icon.click()
+        time.sleep(3)
+        # for excel output
+        workbook = Workbook()
+        sheet1 = workbook.active
+        sheet1.title = "sheet 1"
+        row_count = 1
+        sheet1.cell(row=row_count, column=1).value = "Property Address:"+Address
+        # copying data
+        popup = driver.find_element_by_xpath("//*[@class='atPopupFeatureInfo']")
+        divs = popup.find_elements_by_tag_name('div')
+        for var in divs:
+            classname = var.get_attribute("class")
+            if "Planning-Applications" in classname:
+                for z in var.find_elements_by_tag_name('div'):
+                    for zz in z.find_elements_by_tag_name('p'):
+                        row_count = row_count + 1
+                        sheet1.cell(row=row_count, column=1).value = zz.text
+        address = Address.strip()
+        workbook.save("C:/Users/Vidhya/Desktop/Rightsearchoutput/Newport/" + address + ".xlsx")
+        driver.close()
+        # csv conversion
+        data = pandas.read_excel("C:/Users/Vidhya/Desktop/Rightsearchoutput/Newport/" + Address + ".xlsx",engine='openpyxl')
+        data.to_csv("C:/Users/Vidhya/Desktop/Rightsearchoutput/Newport/" + Address + ".csv", index=None, header=True)
+        os.remove("C:/Users/Vidhya/Desktop/Rightsearchoutput/Newport/" + Address + ".xlsx")
+        return 0
+    except Exception as e:
+       return e
+def glamorgan(Address, website):
+   try:
+       driver = webdriver.Chrome(executable_path="C:/Driver/chromedriver.exe")
+       driver.get(website)
+       driver.maximize_window()
+       print(Fore.LIGHTYELLOW_EX+"Loading...")
+       driver.implicitly_wait(10)
+       time.sleep(5)
+       # browser work
+       wait = WebDriverWait(driver, 200)
+       My_maps = wait.until(EC.element_to_be_clickable((By.ID, "atTabBar_btnTabValeOfGlamorgan_-_AllMaps")))
+       My_maps.click()
+       time.sleep(5)
+       search = wait.until(EC.element_to_be_clickable((By.ID, "atTextSearch")))
+       search.send_keys(Address)
+       time.sleep(5)
+       find = wait.until(EC.element_to_be_clickable((By.XPATH, "/html/body/div[2]/form/div[4]/div/p/form/input[2]")))
+       find.click()
+       time.sleep(5)
+       list = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='id_aw_results']/ol/li/a")))
+       list.click()
+       time.sleep(5)
+       check = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='showmapcategories']/div[9]/h3/span[1]/input")))
+       check.click()
+       time.sleep(5)
+       icon = wait.until(EC.element_to_be_clickable((By.ID, "OL_Icon_121_innerImage")))
+       icon.click()  # //*[@id="OL_Icon_121_innerImage"]
+       time.sleep(10)
+       # for excel output
+       workbook = Workbook()
+       sheet1 = workbook.active
+       sheet1.title = "sheet 1"
+       row_count = 1
+       sheet1.cell(row=row_count, column=1).value = "Property Address:"+Address
+       # copying data
+       popup = driver.find_element_by_xpath("//*[@class='atPopupFeatureInfo']")
+       divs = popup.find_elements_by_tag_name('div')
+       flag = 0
+       for var in divs:
+           classname = var.get_attribute("class")
+           if "Planning-Applications" in classname:
+               flag = 1
+               for z in var.find_elements_by_tag_name('div'):
+                   p = z.find_elements_by_tag_name("p")
+                   for field in p:
+                       row_count=row_count+1
+                       sheet1.cell(row=row_count, column=1).value = field.text
+       if (flag == 0):
+           sheet1.cell(row=2, column=1).value = "Planning applications not available for this address"
+       address = Address.strip()
+       workbook.save("C:/Users/Vidhya/Desktop/Rightsearchoutput/Valeofglamorgan/" + address + ".xlsx")
+       driver.close()
+       # csv conversion
+       data = pandas.read_excel("C:/Users/Vidhya/Desktop/Rightsearchoutput/Valeofglamorgan/" + address + ".xlsx", engine='openpyxl')
+       data.to_csv("C:/Users/Vidhya/Desktop/Rightsearchoutput/Valeofglamorgan/" + address + ".csv", index=None, header=True)
+       os.remove("C:/Users/Vidhya/Desktop/Rightsearchoutput/Valeofglamorgan/" + address + ".xlsx")
+       return 0
+   except Exception as e:
+      return e
+def merthyrTydfill(Address, website):
+    try:
+        driver = webdriver.Chrome(executable_path="C:/Driver/chromedriver.exe")
+        driver.get(website)
+        driver.maximize_window()
+        print(Fore.LIGHTYELLOW_EX+"Loading...")
+        driver.implicitly_wait(10)
+        time.sleep(5)
+        # select All
+        wait = WebDriverWait(driver, 150)
+        element = wait.until(EC.element_to_be_clickable((By.ID, "searchTypeStatus")))
+        drp = Select(element)
+        drp.select_by_visible_text("All")
+        time.sleep(8)
+        # browser
+        wait = WebDriverWait(driver, 150)
+        element = wait.until(EC.element_to_be_clickable((By.ID, "simpleSearchString")))
+        time.sleep(8)
+        element.click()
+        time.sleep(4)
+        element.send_keys(Address)
+        element2 = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='simpleSearchForm']/div[3]/input[3]")))
+        element2.click()  # find
+
+        # for excel output
+        workbook = Workbook()
+        sheet1 = workbook.active
+        sheet1.title = "sheet 1"
+        row_count = 1
+        sheet1.cell(row=row_count, column=1).value ="Property Address:"+Address
+        row_count=row_count+1
+        sheet1.cell(row=row_count, column=1).value = "_____Summary_____"
+        element4 = wait.until(EC.element_to_be_clickable((By.ID, "simpleDetailsTable")))
+        table_rows = element4.find_elements_by_tag_name("tr")
+        Listy = ["Reference", "Address", "Proposal", "Status", "Decision", "Decision Issued Date", "Appeal Status","Appeal Decision"]
+        for tr in table_rows:
+            thead = tr.find_element_by_tag_name("th").text
+            if thead in Listy:
+                tbody = tr.find_element_by_tag_name("td").text
+                # pasting the output in excel
+                row_count = row_count + 1
+                sheet1.cell(row=row_count, column=1).value = thead + ":" + tbody
+        row_count = row_count + 1
+        sheet1.cell(row=row_count, column=1).value = "_____Important Dates_____"
+        # extracting details
+        element3 = wait.until(EC.element_to_be_clickable((By.ID, "subtab_dates")))
+        element3.click()
+        element4 = wait.until(EC.element_to_be_clickable((By.ID, "simpleDetailsTable")))
+        table_rows = element4.find_elements_by_tag_name("tr")
+        Listy=["Application Received Date","Application Validated Date","Decision Made Date","Decision Issued Date","Decision Printed Date","Temporary Permission Expiry Date"]
+        for tr in table_rows:
+            thead = tr.find_element_by_tag_name("th").text
+            if thead in Listy:
+                tbody = tr.find_element_by_tag_name("td").text
+                    # pasting the output in excel
+                row_count = row_count + 1
+                sheet1.cell(row=row_count, column=1).value =thead+":"+tbody
+        address = Address.strip()
+        workbook.save("C:/Users/Vidhya/Desktop/Rightsearchoutput/Merthyr/" + address + ".xlsx")
+        driver.close()
+        #csv conversion
+        data = pandas.read_excel("C:/Users/Vidhya/Desktop/Rightsearchoutput/Merthyr/" + address + ".xlsx",engine='openpyxl')
+        data.to_csv("C:/Users/Vidhya/Desktop/Rightsearchoutput/Merthyr/" + address + ".csv", index=None,header=True)
+        os.remove("C:/Users/Vidhya/Desktop/Rightsearchoutput/Merthyr/" + address + ".xlsx")
+        return 0
+    except Exception as e:
+        return e
+def swansea(Address, website):
+    try:
+        driver = webdriver.Chrome(executable_path="C:/Driver/chromedriver.exe")
+        print(Fore.LIGHTYELLOW_EX+"Loading...")
+        driver.get(website)
+        driver.maximize_window()
+        driver.implicitly_wait(10)
+        time.sleep(5)
+        wait = WebDriverWait(driver, 150)
+        textbox = wait.until(EC.element_to_be_clickable((By.ID, "simpleSearchString")))
+        time.sleep(8)
+        textbox.click()
+        time.sleep(4)
+        textbox.send_keys(Address)  # //*[@id="simpleSearchForm"]/div[3]/input[3]
+        find = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='simpleSearchForm']/div[3]/input[3]")))
+        find.click()  # find
+        time.sleep(5)
+        results_container = driver.find_element_by_id("searchResultsContainer")
+        ul = results_container.find_elements_by_tag_name("li")
+        # for excel output
+        workbook = Workbook()
+        sheet1 = workbook.active
+        sheet1.title = "sheet 1"
+        row_count = 1
+        sheet1.cell(row=1, column=1).value = "Property Address:" + Address
+        for li in range(1, len(ul) + 1):
+            row_count = row_count + 1
+            sheet1.cell(row=row_count, column=1).value ="__________Result"+ str(li)+"__________"
+            link = driver.find_element_by_xpath("//*[@id='searchresults']/li[" + str(li) + "]/a")
+            link.click()
+            time.sleep(3)
+            row_count=row_count+1
+            sheet1.cell(row=row_count, column=1).value = "_____Summary_____"
+            element4 = wait.until(EC.element_to_be_clickable((By.ID, "simpleDetailsTable")))
+            table_rows = element4.find_elements_by_tag_name("tr")
+            Listy = ["Reference", "Address", "Proposal", "Status", "Decision", "Decision Issued Date", "Appeal Status","Appeal Decision"]
+            for t in table_rows:
+                thead = t.find_element_by_tag_name("th").text
+                if thead in Listy:
+                    tbody = t.find_element_by_tag_name("td").text
+                    row_count = row_count + 1
+                    sheet1.cell(row=row_count, column=1).value = thead + ":" + tbody
+            row_count = row_count + 1
+            sheet1.cell(row=row_count, column=1).value = "_____Important Dates_____"
+            element3 = wait.until(EC.element_to_be_clickable((By.ID, "subtab_dates")))
+            element3.click()  # find
+            element4 = wait.until(EC.element_to_be_clickable((By.ID, "simpleDetailsTable")))
+            table_rows = element4.find_elements_by_tag_name("tr")
+            Listy = ["Application Received Date", "Application Validated Date", "Decision Made Date","Decision Issued Date", "Decision Printed Date","Temporary Permission Expiry Date"]
+            for t in table_rows:
+                thead = t.find_element_by_tag_name("th").text
+                if thead in Listy:
+                    tbody = t.find_element_by_tag_name("td").text
+                    row_count = row_count + 1
+                    sheet1.cell(row=row_count, column=1).value = thead+":"+tbody
+            workbook.save("C:/Users/Vidhya/Desktop/Rightsearchoutput/Swansea/" + Address + ".xlsx")
+            driver.back()
+            driver.back()
+        driver.close()
+        #csv conversion
+        data = pandas.read_excel("C:/Users/Vidhya/Desktop/Rightsearchoutput/Swansea/" + Address + ".xlsx",engine='openpyxl')
+        data.to_csv("C:/Users/Vidhya/Desktop/Rightsearchoutput/Swansea/" + Address + ".csv", index=None, header=True)
+        os.remove("C:/Users/Vidhya/Desktop/Rightsearchoutput/Swansea/" + Address + ".xlsx")
+        return 0
+    except Exception as e:
+        return e
+def pembrokeshire(Address, website):
+    try:
+        driver = webdriver.Chrome(executable_path="C:/Driver/chromedriver.exe")
+        print("Loading...")
+        driver.get(website)
+        driver.implicitly_wait(10)
+        driver.maximize_window()
+        time.sleep(5)
+        wait = WebDriverWait(driver, 150)
+        textbox = wait.until(EC.element_to_be_clickable((By.NAME, "JUSTLOCATION.MAINBODY.WPACIS.1")))
+        time.sleep(3)
+        textbox.click()
+        textbox.send_keys(Address)
+        search = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='apas_form']/fieldset[3]/input")))
+        time.sleep(3)
+        search.click()
+        time.sleep(7)
+        table = driver.find_element_by_class_name("apas_tbl")
+        rows = table.find_elements_by_tag_name("tr")
+        county = 0
+        for row in rows:
+            county = county + 1
+        # for excel output
+        workbook = Workbook()
+        sheet1 = workbook.active
+        sheet1.title = "sheet 1"
+        row_count = 1
+        sheet1.cell(row=1, column=1).value = "Property Address:" + Address
+        for row in range(2, county + 1):
+            row_count=row_count+1
+            sheet1.cell(row=row_count, column=1).value = "Result"+str(row-1)
+            link = driver.find_element_by_xpath("// *[ @ id = 'apas_form'] / table / tbody / tr[" + str(row) + "] / td[1] / a")
+            link.click()
+            time.sleep(3)
+            div1 = driver.find_element_by_class_name("apas")
+            div1s = div1.find_elements_by_tag_name("div")
+            row_count = row_count + 1
+            sheet1.cell(row=row_count , column=1).value = "Application Details"
+            for row in div1s:
+                label = row.find_element_by_tag_name("label")
+                label = label.text
+                para=row.find_element_by_tag_name("p")
+                para=para.text
+                row_count = row_count + 1
+                sheet1.cell(row=row_count, column=1).value = label+para
+            div2 = driver.find_element_by_id("tabContent")
+            div2s = div2.find_elements_by_tag_name("div")
+            row_count=row_count + 1
+            sheet1.cell(row=row_count, column=1).value = "Applicant Details"
+            for row2 in div2s:
+                row_count = row_count + 1
+                label = row.find_element_by_tag_name("label")
+                label = label.text.strip("Comment:")
+                sheet1.cell(row=row_count, column=1).value = label+row2.text
+            workbook.save("C:/Users/Vidhya/Desktop/Rightsearchoutput/Pembrokeshire/" + Address + ".xlsx")
+            driver.back()
+        driver.close()
+        #csv conversion
+        data = pandas.read_excel("C:/Users/Vidhya/Desktop/Rightsearchoutput/Pembrokeshire/" + Address + ".xlsx",engine='openpyxl')
+        data.to_csv("C:/Users/Vidhya/Desktop/Rightsearchoutput/Pembrokeshire/" + Address + ".csv", index=None, header=True)
+        os.remove("C:/Users/Vidhya/Desktop/Rightsearchoutput/Pembrokeshire/" + Address + ".xlsx")
+        return 0
+    except Exception as e:
+        return e
+def ceredigion(Address, website):
+    try:
+        # browser
+        driver = webdriver.Chrome(executable_path="C:/Driver/chromedriver.exe")
+        print(Fore.LIGHTYELLOW_EX+"Loading...")
+        driver.get("https://www.ceredigion.gov.uk/resident/planning-building-control-and-sustainable-drainage-body-sab/planning-building-control/planning-applications/")
+        driver.implicitly_wait(10)
+        time.sleep(5)
+        wait = WebDriverWait(driver, 200)
+        launch = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='innerwrapper']/section[2]/div/div/div[1]/p[3]/a")))
+        launch.click()
+        time.sleep(3)
+        search = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='content']/div/div/div/div[5]/div/div[2]/div[2]/div[1]/a")))
+        search.click()
+        time.sleep(3)
+        sitetext = wait.until(EC.element_to_be_clickable((By.ID, "site_address_description")))
+        sitetext.click()
+        sitetext.send_keys(Address)
+        time.sleep(3)
+        search = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='form']/div[14]/div/div/button[1]")))
+        search.click()
+        table = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='widget-grid']/div/article/div/div/div[2]/div/table")))
+        trs = table.find_elements_by_tag_name('tr')
+        count = 0
+        for b in trs:
+            count = count + 1
+        # for excel output
+        workbook = Workbook()
+        sheet1 = workbook.active
+        sheet1.title = "sheet 1"
+        row_count = 1
+        sheet1.cell(row=row_count, column=1).value = "Property Address:" + Address
+        for a in range(1, count):
+            sheet1.cell(row=row_count, column=1).value ="_____Result"+str(a)+"_____"
+            view = driver.find_element_by_xpath( "//*[@id='widget-grid']/div/article/div/div/div[2]/div/table/tbody/tr[" + str(a) + "]/td[8]/button")
+            view.click()
+            time.sleep(15)
+            driver.switch_to.window(driver.window_handles[a])
+            popup = driver.find_element_by_xpath("//*[@id='application_details']/div/div[2]")
+            divs = popup.find_elements_by_class_name("col-md-6")
+            for div in divs:
+                rows = div.find_elements_by_tag_name('div')
+                for row in rows:
+                    classname = row.get_attribute("class")
+                    if "row pad-bottom-5" in classname:
+                        innerrows = row.find_elements_by_tag_name('div')
+                        str1 = ""
+                        for i in innerrows:
+                            str1 = str1 + (i.text)
+                        row_count = row_count + 1
+                        sheet1.cell(row=row_count, column=1).value = str1
+            workbook.save("C:/Users/Vidhya/Desktop/Rightsearchoutput/Ceredigion/" + Address + ".xlsx")
+            driver.switch_to.window(driver.window_handles[0])
+            time.sleep(2)
+        driver.quit()
+        # csv conversion
+        data = pandas.read_excel("C:/Users/Vidhya/Desktop/Rightsearchoutput/Ceredigion/" + Address + ".xlsx",engine='openpyxl')
+        data.to_csv("C:/Users/Vidhya/Desktop/Rightsearchoutput/Ceredigion/" + Address + ".csv", index=None,header=True)
+        os.remove("C:/Users/Vidhya/Desktop/Rightsearchoutput/Ceredigion/" + Address + ".xlsx")
+        return 0
+    except Exception as e:
+        return e
+def caerphilly(Address, website):
+    try:
+        driver = webdriver.Chrome(executable_path="C:/Driver/chromedriver.exe")
+        driver.get(website)
+        driver.maximize_window()
+        print(Fore.LIGHTYELLOW_EX+"Loading...")
+        driver.implicitly_wait(10)
+        time.sleep(5)
+        # browser
+        wait = WebDriverWait(driver, 150)
+        element = wait.until(EC.element_to_be_clickable((By.ID, "simpleSearchString")))
+        time.sleep(8)
+        element.click()
+        time.sleep(4)
+        element.send_keys(Address)
+        element2 = wait.until(EC.element_to_be_clickable((By.XPATH, "//*[@id='simpleSearchForm']/div[3]/input[3]")))
+        element2.click()  # find
+        # for excel output
+        workbook = Workbook()
+        sheet1 = workbook.active
+        sheet1.title = "sheet 1"
+        row_count = 1
+        sheet1.cell(row=row_count, column=1).value = "Property Address:" + Address
+        row_count=row_count+1
+        sheet1.cell(row=row_count, column=1).value = "_____Summary_____"
+        #summary
+        element4 = wait.until(EC.element_to_be_clickable((By.ID, "simpleDetailsTable")))
+        table_rows = element4.find_elements_by_tag_name("tr")
+        Listy = ["Reference", "Address", "Proposal", "Status", "Decision", "Decision Issued Date", "Appeal Status","Appeal Decision"]
+        for tr in table_rows:
+            thead = tr.find_element_by_tag_name("th").text
+            if thead in Listy:
+                tbody = tr.find_element_by_tag_name("td").text
+                row_count = row_count + 1
+                sheet1.cell(row=row_count, column=1).value = thead+":"+tbody
+        row_count = row_count + 1
+        sheet1.cell(row=row_count, column=1).value = "_____Important dates_____"
+        element3 = wait.until(EC.element_to_be_clickable((By.ID, "subtab_dates")))
+        element3.click()  # find
+        # extracting details
+        element4 = wait.until(EC.element_to_be_clickable((By.ID, "simpleDetailsTable")))
+        table_rows = element4.find_elements_by_tag_name("tr")
+        Listy=["Application Received Date","Application Validated Date","Decision Made Date","Decision Issued Date","Decision Printed Date","Temporary Permission Expiry Date"]
+        for tr in table_rows:
+            row_count = row_count + 1
+            thead = tr.find_element_by_tag_name("th").text
+            if thead in Listy:
+                tbody = tr.find_element_by_tag_name("td").text
+                sheet1.cell(row=row_count, column=1).value = thead+":"+tbody
+        address = Address.strip()
+        workbook.save("C:/Users/Vidhya/Desktop/Rightsearchoutput/Caerphilly/" + address + ".xlsx")
+        driver.close()
+        #csv conversion
+        data = pandas.read_excel("C:/Users/Vidhya/Desktop/Rightsearchoutput/Caerphilly/" + Address + ".xlsx",engine='openpyxl')
+        data.to_csv("C:/Users/Vidhya/Desktop/Rightsearchoutput/Caerphilly/" + Address + ".csv", index=None, header=True)
+        os.remove("C:/Users/Vidhya/Desktop/Rightsearchoutput/Caerphilly/" + Address + ".xlsx")
+        return 0
+    except Exception as e:
+        return e
+for count in range(14, rows_count + 1):
+    # fetching input address from excel
+    Address = propertysheet.cell(row=count, column=1).value
+    postalcode=findpostal1(Address)  #extracting postalcode from address
+    if postalcode == 0:
+        print(Fore.LIGHTWHITE_EX+str(count)+Address+Fore.RED+" -Postal Code not found! Please Check the address...")
+    elif(str(postalcode).isalnum()==False):
+        print(Fore.LIGHTWHITE_EX+str(count)+Address+Fore.RED+" -"+str(postalcode))
+    else:
+        website=findweblink(postalcode)
+        if(website==0):
+            print(Fore.LIGHTWHITE_EX+Address+Fore.RED+" -Postal code of this address not found in the list")
+        else:
+            if(website.strip() == "http://ishare.cardiff.gov.uk/"):
+              result=cardiff(Address,website)
+              resultt(count,result,Address)
+            elif(website.strip() == "https://planningonline.torfaen.gov.uk/"):
+                result=torfaen(Address,website)
+                resultt(count, result, Address)
+            elif(website.strip() == "https://planningonline.npt.gov.uk/online-applications/"):
+                result = npt(Address, website)
+                resultt(count, result, Address)
+            elif(website.strip() == "https://pa.powys.gov.uk/online-applications/?lang=EN"):
+                result = powys(Address, website)
+                resultt(count, result, Address)
+            elif(website.strip() == "https://publicaccess.caerphilly.gov.uk/PublicAccess/"):
+                result = caerphilly(Address, website)
+                resultt(count, result, Address)
+            elif(website.strip() == "https://my.rctcbc.gov.uk/myRhondda.aspx?MapSource=RCT/AllMaps_english&amp;StartEasting=299818&amp;StartN"):
+                result = rhondaa(Address, website)
+                resultt(count, result, Address)
+            elif(website.strip() == "https://maps.monmouthshire.gov.uk/localinfo.aspx"):
+                result = monmouthshire(Address, website)
+                resultt(count, result, Address)
+            elif(website.strip()=="http://planning.bridgend.gov.uk/"):
+                result =bridgend(Address, website)
+                resultt(count, result, Address)
+            elif(website.strip()=="https://my.newport.gov.uk/myNewport.aspx"):
+                result = newport(Address, website)
+                resultt(count, result, Address)
+            elif(website.strip()=="https://myvale.valeofglamorgan.gov.uk/mycouncil.aspx"):
+                result = glamorgan(Address, website)
+                resultt(count, result, Address)
+            elif(website.strip()=="https://publicaccess.merthyr.gov.uk/online-applications/"):
+                result =merthyrTydfill(Address, website)
+                resultt(count, result, Address)
+            elif(website.strip()=="https://property.swansea.gov.uk/online-applications"):
+                result =swansea(Address, website)
+                resultt(count, result, Address)
+            elif(website.strip()=="http://planning.pembrokeshire.gov.uk/swiftlg/apas/run/wphappcriteria.display"):
+                result =pembrokeshire(Address, website)
+                resultt(count, result, Address)
+            elif(website.strip()=="https://www.ceredigion.gov.uk/resident/planning-building-control-and-sustainable-drainage-body-sab/planning-building-control/planning-applications/"):
+                result =ceredigion(Address, website)
+                resultt(count, result, Address)
+            else:
+                result =carmarthenshire(Address, website)
+                resultt(count, result, Address)
